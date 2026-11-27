@@ -2,6 +2,7 @@ import csv
 import hmac
 import io
 import os
+import sqlite3
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, send_file, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import text, inspect
@@ -453,6 +454,65 @@ def download_db():
         user=current_user
     )
     return send_file(db_path, as_attachment=True, download_name='ai_key_manager.db')
+
+
+@admin_bp.route('/database/restore', methods=['POST'])
+@login_required
+@admin_required
+def restore_db():
+    if not _is_db_unlocked():
+        flash('Database password required.', 'danger')
+        return redirect(url_for('admin.database'))
+
+    uploaded = request.files.get('db_file')
+    if not uploaded or not uploaded.filename:
+        flash('Please select a .db backup file to restore.', 'danger')
+        return redirect(url_for('admin.database'))
+
+    if not uploaded.filename.lower().endswith('.db'):
+        flash('Invalid file type. Only SQLite .db files are allowed.', 'danger')
+        return redirect(url_for('admin.database'))
+
+    header = uploaded.stream.read(16)
+    uploaded.stream.seek(0)
+    if header != b'SQLite format 3\x00':
+        flash('Invalid SQLite database file.', 'danger')
+        return redirect(url_for('admin.database'))
+
+    db_path = os.path.join(current_app.config['INSTANCE_DIR'], 'ai_key_manager.db')
+    tmp_path = db_path + '.restore.tmp'
+    try:
+        uploaded.save(tmp_path)
+        conn = sqlite3.connect(tmp_path)
+        try:
+            tables = {
+                r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+        finally:
+            conn.close()
+
+        if 'users' not in tables or 'api_key_metadata' not in tables:
+            os.remove(tmp_path)
+            flash('Backup file is missing required AI Key Manager tables.', 'danger')
+            return redirect(url_for('admin.database'))
+
+        db.session.remove()
+        db.engine.dispose()
+        os.replace(tmp_path, db_path)
+
+        log_audit(
+            action='DATABASE_BACKUP_RESTORED',
+            resource_type='Database',
+            details=f"Admin restored SQLite database from '{uploaded.filename}'",
+            user=current_user
+        )
+        flash('SQLite database restored successfully!', 'success')
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        flash(f'Error restoring database: {str(e)}', 'danger')
+
+    return redirect(url_for('admin.database'))
 
 
 @admin_bp.route('/email-monitoring', methods=['GET'])
