@@ -9,8 +9,6 @@ if __name__ == '__main__':
         db.create_all()
         from app.models import User
         if not User.query.first():
-            from seed import run_
-            
-            seed
+            from seed import run_seed
             run_seed()
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5001)), debug=True)
