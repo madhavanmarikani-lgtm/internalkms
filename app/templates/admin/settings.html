@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+{% block page_title %}System Governance & Configuration{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9 col-xl-8">
+    <div class="card card-custom">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-gear-fill text-primary me-2"></i>System Governance Settings
+        </h5>
+        <span class="badge bg-primary">Admin Only</span>
+      </div>
+
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('admin.settings') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <!-- Application Brand -->
+          <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">1. Organization & Branding</h6>
+          <div class="mb-4">
+            <label class="form-label small fw-semibold">System Title / Dashboard Name</label>
+            <input type="text" class="form-control" name="app_title" value="{{ settings.app_title }}" required>
+            <div class="form-text small">Rendered in the header, navbar, and exported audit reports.</div>
+          </div>
+
+          <!-- Alert Thresholds -->
+          <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">2. Key Expiration Monitoring Thresholds</h6>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Notice Alert (Days)</label>
+              <input type="number" class="form-control" name="expiry_notice_days" value="{{ settings.expiry_notice_days }}" required min="15">
+              <div class="form-text small">Early advisory alert threshold (default: 30d).</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Warning Alert (Days)</label>
+              <input type="number" class="form-control" name="expiry_warning_days" value="{{ settings.expiry_warning_days }}" required min="8">
+              <div class="form-text small">Escalated warning threshold (default: 14d).</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Critical Alert (Days)</label>
+              <input type="number" class="form-control" name="expiry_critical_days" value="{{ settings.expiry_critical_days }}" required min="1">
+              <div class="form-text small">Urgent alert threshold (default: 7d).</div>
+            </div>
+          </div>
+
+          <!-- Alert Recipients (Editable in Admin Panel) -->
+          <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">3. Alert Email Recipients</h6>
+          <div class="mb-4">
+            <label class="form-label small fw-semibold">Recipient Email Address(es)</label>
+            <input type="text" class="form-control font-monospace" name="alert_recipient_emails" value="{{ settings.alert_recipient_emails }}" placeholder="e.g. admin@company.com, ops@company.com">
+            <div class="form-text small">Comma-separated email IDs that receive 7-day expiry alerts.</div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+            <button type="submit" class="btn btn-primary px-4 shadow-sm">
+              <i class="bi bi-save me-1"></i>Save Configuration Changes
+            </button>
+          </div>
+        </form>
+
+        <!-- Read-only SMTP Status & Test Email -->
+        <div class="mt-4 pt-4 border-top">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">
+            <h6 class="fw-bold text-primary mb-0">4. SMTP Server Status</h6>
+            {% if smtp_configured %}
+              <span class="badge badge-soft-success">Configured</span>
+            {% else %}
+              <span class="badge badge-soft-warning">Not Configured</span>
+            {% endif %}
+          </div>
+          <p class="small text-muted mb-3">
+            SMTP host, username, and password are managed securely via server environment configuration.
+          </p>
+          <div class="row g-2 small mb-3 bg-light p-3 rounded border">
+            <div class="col-md-4"><span class="text-muted">SMTP Host:</span> <strong class="font-monospace">{{ smtp_host or 'Not set' }}</strong></div>
+            <div class="col-md-2"><span class="text-muted">Port:</span> <strong class="font-monospace">{{ smtp_port }}</strong></div>
+            <div class="col-md-6"><span class="text-muted">Active Recipients:</span> <strong class="font-monospace">{{ smtp_recipients or 'Not set' }}</strong></div>
+          </div>
+          <form method="POST" action="{{ url_for('admin.send_test_email') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-light border" {% if not smtp_configured %}disabled{% endif %}>
+              <i data-lucide="mail" class="me-1"></i>Send Test Alert Email
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

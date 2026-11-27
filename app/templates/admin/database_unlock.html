@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Unlock Database{% endblock %}
+{% block page_title %}Database Access Protected{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-md-6 col-lg-5">
+    <div class="card card-custom p-4 p-md-5 text-center">
+      <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle"
+           style="width: 56px; height: 56px; background: #EFF6FF; color: #2563EB;">
+        <i data-lucide="lock" style="width: 26px; height: 26px;"></i>
+      </div>
+      <h5 class="fw-bold text-dark mb-1">Database Access Protected</h5>
+      <p class="text-muted small mb-4">Enter the Database Password to inspect, edit, or export SQLite tables.</p>
+
+      <form method="POST" action="{{ url_for('admin.unlock_database') }}" class="text-start">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold text-dark">Database Password *</label>
+          <div class="input-group">
+            <span class="input-group-text bg-light border-end-0 text-muted"><i data-lucide="key-round"></i></span>
+            <input type="password" class="form-control border-start-0 border-end-0" name="db_password" id="dbPasswordInput" required autofocus placeholder="Enter database password">
+            <button type="button" class="btn btn-light border border-start-0 text-muted" id="toggleDbPwBtn" onclick="toggleDbPw()">
+              <i data-lucide="eye"></i>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
+          <i data-lucide="unlock"></i><span>Unlock Database</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggleDbPw() {
+    const input = document.getElementById('dbPasswordInput');
+    const btn = document.getElementById('toggleDbPwBtn');
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.innerHTML = '<i data-lucide="eye-off"></i>';
+    } else {
+      input.type = 'password';
+      btn.innerHTML = '<i data-lucide="eye"></i>';
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+</script>
+{% endblock %}

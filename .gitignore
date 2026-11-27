@@ -1,0 +1,28 @@
+# Environment & secrets
+.env
+*.env.local
+
+# Virtual environments
+env/
+venv/
+.venv/
+
+# Python cache & test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local SQLite databases & instance data
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

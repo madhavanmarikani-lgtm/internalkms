@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Applications{% endblock %}
+{% block page_title %}Applications{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">Applications</h4>
+    <p class="text-muted small mb-0">Consuming services and their linked AI API keys.</p>
+  </div>
+</div>
+
+<!-- Applications Grid -->
+<div class="row g-3">
+  {% if applications %}
+    {% for app in applications %}
+    {% set active_cnt = app.api_keys | selectattr('status', 'equalto', 'Active') | list | length %}
+    {% set expiring_cnt = app.api_keys | selectattr('status', 'equalto', 'Expiring Soon') | list | length %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card card-custom h-100 p-4 d-flex flex-column justify-content-between">
+        <div>
+          <!-- Card Header -->
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="d-flex align-items-center gap-2">
+              <div class="stat-icon-box" style="width: 38px; height: 38px; background: #EFF6FF; color: #2563EB;">
+                <i data-lucide="layers"></i>
+              </div>
+              <div>
+                <h6 class="fw-bold mb-1 text-dark">{{ app.name }}</h6>
+                <div class="d-flex align-items-center gap-1">
+                  {% if app.environment == 'Production' %}
+                    <span class="badge badge-soft-danger" style="font-size: 0.7rem;">Production</span>
+                  {% else %}
+                    <span class="badge badge-soft-warning" style="font-size: 0.7rem;">UAT</span>
+                  {% endif %}
+                  <span class="badge badge-soft-success" style="font-size: 0.7rem;">{{ app.status }}</span>
+                </div>
+              </div>
+            </div>
+
+            {% if current_user.is_admin %}
+            <form method="POST" action="{{ url_for('applications.delete', app_id=app.id) }}" onsubmit="return confirm('Delete application \'{{ app.name }}\'?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-light border text-danger py-1 px-2" title="Delete Application">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+
+          <!-- Key Count & Health Indicators -->
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge badge-soft-slate">{{ app.api_keys|length }} Linked Key(s)</span>
+            <span class="badge badge-soft-success">{{ active_cnt }} Active</span>
+            {% if expiring_cnt > 0 %}
+              <span class="badge badge-soft-danger">{{ expiring_cnt }} Expiring Soon</span>
+            {% endif %}
+          </div>
+
+          <!-- Linked Keys List -->
+          <div class="d-flex flex-column gap-2">
+            {% if app.api_keys %}
+              {% for k in app.api_keys %}
+                {% set days_left = k.days_until_expiry %}
+                {% set is_critical_7d = (days_left is not none and days_left >= 0 and days_left <= 7 and k.status != 'Revoked') %}
+                <a href="{{ url_for('api_keys.detail', key_id=k.id) }}"
+                   class="p-2 rounded border text-decoration-none d-flex justify-content-between align-items-center {% if is_critical_7d %}row-expiring-7d border-danger{% else %}bg-light{% endif %}">
+                  <div>
+                    <div class="d-flex align-items-center gap-1 mb-1">
+                      <span class="badge-provider badge-{{ k.provider.lower().replace(' ', '-') }}" style="font-size: 0.68rem;">{{ k.provider }}</span>
+                      <span class="fw-semibold text-dark small">{{ k.name }}</span>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.74rem;">
+                      Owner: <strong class="text-dark">{{ k.owner_name }}</strong>
+                      {% if k.expires_at %}
+                        &bull; Exp: {{ k.expires_at.strftime('%Y-%m-%d') }}
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% if is_critical_7d %}
+                    <span class="badge bg-danger">{{ days_left }}d left</span>
+                  {% elif k.status == 'Active' %}
+                    <span class="badge badge-soft-success">{{ k.status }}</span>
+                  {% else %}
+                    <span class="badge badge-soft-slate">{{ k.status }}</span>
+                  {% endif %}
+                </a>
+              {% endfor %}
+            {% else %}
+              <div class="text-muted small fst-italic py-2">No keys assigned yet.</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Footer: Last Activity & View Keys -->
+        <div class="pt-3 border-top mt-3 d-flex justify-content-between align-items-center">
+          <small class="text-muted">
+            Last activity: {{ (app.updated_at or app.created_at).strftime('%Y-%m-%d') }}
+          </small>
+          <a href="{{ url_for('api_keys.index', application_id=app.id) }}" class="btn btn-sm btn-light border fw-medium d-inline-flex align-items-center gap-1">
+            <span>View Keys</span>
+            <i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="col-12">
+      <div class="card card-custom p-5 text-center text-muted">
+        <i data-lucide="layers" class="mx-auto mb-2" style="width: 32px; height: 32px;"></i>
+        <div class="fw-semibold text-dark mb-1">No Applications Found</div>
+        <div class="small">Add an API key to automatically register an application.</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

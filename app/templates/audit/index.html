@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">Audit Logs</h4>
+    <p class="text-muted small mb-0">Immutable chronological trail of key creation, rotation, access, and system changes.</p>
+  </div>
+  <a href="{{ url_for('audit.export_csv', q=search_query, action=current_action, resource_type=current_resource, user=current_user_filter, date_from=date_from, date_to=date_to) }}" class="btn btn-light border btn-sm shadow-sm d-inline-flex align-items-center gap-2">
+    <i data-lucide="download"></i><span>Export CSV</span>
+  </a>
+</div>
+
+<!-- Filter Bar -->
+<div class="card card-custom p-3 mb-4">
+  <form method="GET" action="{{ url_for('audit.index') }}" class="row g-2 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label small fw-medium text-muted mb-1">Search</label>
+      <div class="input-group input-group-sm">
+        <span class="input-group-text bg-light border-end-0 text-muted"><i data-lucide="search" style="width: 14px; height: 14px;"></i></span>
+        <input type="text" class="form-control border-start-0" name="q" value="{{ search_query }}" placeholder="Search...">
+      </div>
+    </div>
+
+    <div class="col-md-2 col-sm-6">
+      <label class="form-label small fw-medium text-muted mb-1">Action Type</label>
+      <select name="action" class="form-select form-select-sm">
+        <option value="">All Actions</option>
+        {% for a in actions %}
+        <option value="{{ a }}" {% if current_action == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-2 col-sm-6">
+      <label class="form-label small fw-medium text-muted mb-1">Resource Type</label>
+      <select name="resource_type" class="form-select form-select-sm">
+        <option value="">All Resources</option>
+        {% for r in resources %}
+        <option value="{{ r }}" {% if current_resource == r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-1 col-sm-6">
+      <label class="form-label small fw-medium text-muted mb-1">User</label>
+      <input type="text" class="form-control form-control-sm" name="user" value="{{ current_user_filter }}" placeholder="admin">
+    </div>
+
+    <div class="col-md-2 col-sm-6">
+      <label class="form-label small fw-medium text-muted mb-1">From Date</label>
+      <input type="date" class="form-control form-control-sm" name="date_from" value="{{ date_from }}">
+    </div>
+
+    <div class="col-md-2 col-sm-6">
+      <label class="form-label small fw-medium text-muted mb-1">To Date</label>
+      <input type="date" class="form-control form-control-sm" name="date_to" value="{{ date_to }}">
+    </div>
+
+    <div class="col-md-1 d-flex gap-1">
+      <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
+      <a href="{{ url_for('audit.index') }}" class="btn btn-sm btn-light border" title="Reset"><i data-lucide="x" style="width: 14px; height: 14px;"></i></a>
+    </div>
+  </form>
+</div>
+
+<!-- Audit Table -->
+<div class="card card-custom overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-saas mb-0">
+      <thead>
+        <tr>
+          <th>Timestamp (UTC)</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Resource</th>
+          <th>Client IP</th>
+          <th>Activity Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if logs %}
+          {% for log in logs %}
+          <tr>
+            <td class="text-muted font-monospace text-nowrap" style="font-size: 0.78rem;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td><span class="badge badge-soft-slate">{{ log.username }}</span></td>
+            <td>
+              <span class="badge {% if 'DELETE' in log.action or 'REVOKE' in log.action or 'FAILED' in log.action %}badge-soft-danger{% elif 'CREATE' in log.action or 'ROTAT' in log.action %}badge-soft-success{% elif 'LOGIN' in log.action %}badge-soft-primary{% else %}badge-soft-slate{% endif %}">
+                {{ log.action }}
+              </span>
+            </td>
+            <td class="text-nowrap">
+              <span class="fw-medium text-dark">{{ log.resource_type }}</span>
+              {% if log.resource_id %}
+                <span class="text-muted">#{{ log.resource_id }}</span>
+              {% endif %}
+            </td>
+            <td class="font-monospace text-muted" style="font-size: 0.78rem;">{{ log.ip_address or '127.0.0.1' }}</td>
+            <td class="text-break" style="max-width: 460px;">{{ log.details or '-' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="text-center py-5 text-muted">No audit logs matched your query.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

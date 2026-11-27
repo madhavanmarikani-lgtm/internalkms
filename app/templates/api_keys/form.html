@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} API Key{% endblock %}
+{% block page_title %}{{ action }} AI API Key{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card card-custom">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-key-fill text-primary me-2"></i>{{ action }} API Key
+        </h5>
+        <a href="{{ url_for('api_keys.index') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+      </div>
+
+      <div class="card-body p-4">
+        <form method="POST" action="">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <!-- Row 1: 1st Application (Input Box), 2nd Environment (Production / UAT), 3rd AI Provider -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold">Application Name *</label>
+              <input type="text" class="form-control" name="application_name" list="appSuggestions" required
+                     value="{{ key.application.name if key and key.application else '' }}"
+                     placeholder="e.g. Customer Support Copilot">
+              <datalist id="appSuggestions">
+                {% for app in applications %}
+                <option value="{{ app.name }}">
+                {% endfor %}
+              </datalist>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Environment *</label>
+              <select class="form-select" name="environment" required>
+                {% for env in environments %}
+                <option value="{{ env }}" {% if (key and key.environment == env) or (not key and env == 'Production') %}selected{% endif %}>{{ env }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">AI Provider *</label>
+              <select class="form-select" name="provider" id="providerSelect" required onchange="updateProviderFields()">
+                {% for p in providers %}
+                <option value="{{ p }}" {% if (key and key.provider == p) or (not key and p == 'OpenAI') %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 2: Dynamic Provider-Specific Encrypted Identifiers -->
+          <div class="row g-3 mb-3 p-3 bg-light rounded border">
+            <div class="col-12 mb-0">
+              <small class="text-primary fw-bold"><i class="bi bi-shield-lock-fill me-1"></i>Encrypted Provider Identifiers (Stored Encrypted at Rest)</small>
+            </div>
+
+            <div class="col-md-6" id="projectNameGroup">
+              <label class="form-label small fw-semibold">Project Name</label>
+              <input type="text" class="form-control font-monospace" name="project_name" id="projectNameInput"
+                     value="{{ key.decrypted_project_name if key else '' }}"
+                     placeholder="e.g. proj_support_prod">
+            </div>
+
+            <div class="col-md-6" id="keyIdGroup">
+              <label class="form-label small fw-semibold">Key ID</label>
+              <input type="text" class="form-control font-monospace" name="provider_key_id" id="keyIdInput"
+                     value="{{ key.decrypted_key_id if key else '' }}"
+                     placeholder="e.g. key_01abc987xyz">
+            </div>
+
+            <div class="col-md-6 d-none" id="workspaceIdGroup">
+              <label class="form-label small fw-semibold">Workspace ID</label>
+              <input type="text" class="form-control font-monospace" name="workspace_id" id="workspaceIdInput"
+                     value="{{ key.decrypted_workspace_id if key else '' }}"
+                     placeholder="e.g. wrkspc_01xyz456">
+            </div>
+          </div>
+
+          <!-- Row 3: Key Name & Owner Name -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Key Name *</label>
+              <input type="text" class="form-control" name="name" required value="{{ key.name if key else '' }}" placeholder="e.g. Support GPT-4o Main Key">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Owner Name *</label>
+              <input type="text" class="form-control" name="owner_name" required value="{{ key.owner_name if key else '' }}" placeholder="e.g. Arun Kumar">
+            </div>
+          </div>
+
+          <!-- Row 4: Allowed Models (Dynamic Dropdown) -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-12">
+              <label class="form-label small fw-semibold">Allowed Models *</label>
+              <input type="hidden" name="allowed_models" id="allowedModelsInput" value="{{ key.allowed_models if key and key.allowed_models else '' }}" required>
+              <div class="dropdown">
+                <button class="form-select text-start text-truncate" type="button" id="modelsDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                  Select Allowed Models...
+                </button>
+                <ul class="dropdown-menu w-100 p-2 shadow-sm" id="modelsDropdownMenu" style="max-height: 240px; overflow-y: auto;">
+                  <!-- Populated dynamically by JS based on AI Provider -->
+                </ul>
+              </div>
+              <div class="form-text small">Select one or more models for the chosen provider.</div>
+            </div>
+          </div>
+
+          <!-- Row 5: Fixed 30-Day Expiry Date (Not Editable) & Status -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Expiry Date (Fixed 30 Days - Not Editable)</label>
+              <input type="date" class="form-control bg-light" name="expires_at_display" value="{{ default_expiry_date }}" readonly disabled>
+              <div class="form-text small text-danger"><i class="bi bi-lock-fill me-1"></i>Automatically set to 30 days from creation date. Red alert triggers at &le; 7 days.</div>
+            </div>
+
+            {% if action == 'Edit' %}
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Key Status</label>
+              <select class="form-select" name="status">
+                <option value="Active" {% if key.status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Expiring Soon" {% if key.status == 'Expiring Soon' %}selected{% endif %}>Expiring Soon</option>
+                <option value="Expired" {% if key.status == 'Expired' %}selected{% endif %}>Expired</option>
+                <option value="Revoked" {% if key.status == 'Revoked' %}selected{% endif %}>Revoked</option>
+              </select>
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+            <a href="{{ url_for('api_keys.index') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary px-4">
+              <i class="bi bi-check-lg me-1"></i>Save API Key
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const PROVIDER_MODELS = {
+    'OpenAI': [
+      'gpt-6.2-astra',
+      'gpt-6.2-sol',
+      'gpt-6.1-terra',
+      'gpt-6-luna',
+      'gpt-6-astra',
+      'gpt-6.1-sol',
+      'gpt-6-sol',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.5-pro',
+      'gpt-5.4',
+      'gpt-5.4-pro',
+      'gpt-5.4-mini',
+      'gpt-5.2',
+      'gpt-5.2-pro',
+      'gpt-image-2.6-sunburst',
+      'gpt-image-2.6-flare',
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-flare',
+      'gpt-live-1.1',
+      'gpt-live-1',
+      'gpt-realtime-2.1',
+      'gpt-realtime-2.1-mini',
+      'gpt-realtime-2',
+      'gpt-realtime-1.5',
+      'gpt-realtime-translate',
+      'gpt-live-transcribe',
+      'gpt-realtime-whisper',
+      'gpt-audio-1.5',
+      'gpt-transcribe',
+      'text-embedding-3-large',
+      'text-embedding-3-small',
+      'text-embedding-ada-002',
+      'omni-moderation-latest',
+      'gpt-oss-120b',
+      'gpt-oss-20b',
+      'gpt-6-cyber',
+      'gpt-5.6-cyber',
+      'gpt-rosalind',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-3.5-turbo',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'o1',
+      'o1-pro',
+      'o3',
+      'o3-mini',
+      'o4-mini'
+    ],
+    'Google': [
+      'gemini-4-argon',
+      'gemini-4-hydrogen',
+      'gemini-4-neon',
+      'gemini-4-carbon',
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash-preview',
+      'gemini-nano-banana-2.1',
+      'gemini-3.1-flash-image',
+      'gemini-3.1-flash-lite-image',
+      'gemini-3-pro-image',
+      'gemini-2.5-flash-image',
+      'veo-3.1-generate-preview',
+      'veo-3.1-fast-generate-preview',
+      'veo-3.1-lite-generate-preview',
+      'gemini-3.8-flash-tts',
+      'gemini-3.8-flash-lite-tts',
+      'gemini-3.5-transcribe',
+      'gemini-3.5-transcribe-live',
+      'gemini-3.5-live-translate-preview',
+      'gemini-3.1-flash-tts-preview',
+      'gemini-3.8-live',
+      'gemini-3.8-live-extended-thinking',
+      'gemini-3.1-flash-live-preview',
+      'gemini-embedding-2',
+      'gemini-embedding-2-preview',
+      'gemini-embedding-001',
+      'gemma-4-26b-a4b-it',
+      'gemma-4-31b-it',
+      'gemini-robotics-er-2-preview',
+      'deep-research-preview-04-2026',
+      'deep-research-pro-preview-12-2025',
+      'lyria-3-clip-preview',
+      'lyria-3-pro-preview'
+    ],
+    'Claude': [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+      'claude-fable-5-2',
+      'claude-opus-5',
+      'claude-sonnet-5',
+      'claude-fable-5-1',
+      'claude-fable-5',
+      'claude-mythos-5-2',
+      'claude-mythos-5-1',
+      'claude-mythos-5',
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+      'claude-opus-4-6',
+      'claude-opus-4-5-20251101',
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-5-20250929',
+      'claude-haiku-4-5-20251001',
+      'claude-opus-4-1',
+      'claude-opus-4-0',
+      'claude-sonnet-4-0',
+      'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+      'claude-3-haiku-20240307'
+    ],
+    'Kling': [
+      'kling-4.0',
+      'kling-4.0-flash',
+      'kling-v3',
+      'kling-3.0-turbo',
+      'kling-v3-omni',
+      'kling-video-o1',
+      'kling-v2-6',
+      'kling-v2-5-turbo'
+    ],
+    'Seedance': [
+      'dreamina-seedance-2-5-260628',
+      'dreamina-seedance-2-5-flash-261115',
+      'dreamina-seedance-2-0-260128',
+      'dreamina-seedance-2-0-fast-260128',
+      'dreamina-seedance-2-0-mini-260615',
+      'seedance-1-0-pro-250528',
+      'seedance-1-0-pro-fast-251015'
+    ]
+  };
+
+  function syncSelectedModels() {
+    const checkboxes = document.querySelectorAll('.model-checkbox:checked');
+    const selected = Array.from(checkboxes).map(cb => cb.value);
+    const hiddenInput = document.getElementById('allowedModelsInput');
+    const btn = document.getElementById('modelsDropdownBtn');
+
+    hiddenInput.value = selected.join(', ');
+    if (selected.length === 0) {
+      btn.textContent = 'Select Allowed Models...';
+      btn.classList.add('text-muted');
+    } else {
+      btn.textContent = selected.join(', ');
+      btn.classList.remove('text-muted');
+    }
+  }
+
+  function populateModelsDropdown(provider, initialLoad) {
+    const menu = document.getElementById('modelsDropdownMenu');
+    const hiddenInput = document.getElementById('allowedModelsInput');
+    const models = PROVIDER_MODELS[provider] || [];
+
+    const existingSelected = initialLoad && hiddenInput.value
+      ? hiddenInput.value.split(',').map(s => s.trim())
+      : (models.length > 0 ? [models[0]] : []);
+
+    menu.innerHTML = '';
+
+    // Select All / Clear row
+    const headerLi = document.createElement('li');
+    headerLi.className = 'd-flex justify-content-between px-2 pb-1 mb-1 border-bottom small';
+    headerLi.innerHTML = `
+      <a href="#" class="text-decoration-none fw-semibold" id="selectAllModels">Select All</a>
+      <a href="#" class="text-decoration-none text-danger" id="clearAllModels">Clear</a>
+    `;
+    menu.appendChild(headerLi);
+
+    models.forEach((model, idx) => {
+      const li = document.createElement('li');
+      const isChecked = existingSelected.includes(model);
+      li.innerHTML = `
+        <div class="form-check px-2 py-1 rounded hover-bg-light">
+          <input class="form-check-input model-checkbox ms-0 me-2" type="checkbox" value="${model}" id="modelCheck_${idx}" ${isChecked ? 'checked' : ''}>
+          <label class="form-check-label small w-100 cursor-pointer" for="modelCheck_${idx}">${model}</label>
+        </div>
+      `;
+      menu.appendChild(li);
+    });
+
+    menu.querySelectorAll('.model-checkbox').forEach(cb => {
+      cb.addEventListener('change', syncSelectedModels);
+    });
+
+    document.getElementById('selectAllModels').addEventListener('click', (e) => {
+      e.preventDefault();
+      menu.querySelectorAll('.model-checkbox').forEach(cb => cb.checked = true);
+      syncSelectedModels();
+    });
+
+    document.getElementById('clearAllModels').addEventListener('click', (e) => {
+      e.preventDefault();
+      menu.querySelectorAll('.model-checkbox').forEach(cb => cb.checked = false);
+      syncSelectedModels();
+    });
+
+    syncSelectedModels();
+  }
+
+  function updateProviderFields(isInitial = false) {
+    const provider = document.getElementById('providerSelect').value;
+    const projectGroup = document.getElementById('projectNameGroup');
+    const keyIdGroup = document.getElementById('keyIdGroup');
+    const workspaceGroup = document.getElementById('workspaceIdGroup');
+
+    // Reset visibility
+    projectGroup.classList.add('d-none');
+    keyIdGroup.classList.add('d-none');
+    workspaceGroup.classList.add('d-none');
+
+    if (provider === 'OpenAI') {
+      projectGroup.classList.remove('d-none');
+      keyIdGroup.classList.remove('d-none');
+    } else if (provider === 'Google') {
+      projectGroup.classList.remove('d-none');
+    } else if (provider === 'Claude') {
+      keyIdGroup.classList.remove('d-none');
+      workspaceGroup.classList.remove('d-none');
+    } else {
+      // Kling, Seedance
+      projectGroup.classList.remove('d-none');
+    }
+
+    populateModelsDropdown(provider, isInitial === true);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    updateProviderFields(true);
+  });
+</script>
+{% endblock %}

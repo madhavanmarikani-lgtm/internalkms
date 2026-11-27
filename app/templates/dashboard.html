@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}AI Key Dashboard{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.02em;">AI Key Dashboard</h4>
+    <p class="text-muted small mb-0">Real-time governance across OpenAI, Google, Claude, Kling &amp; Seedance credentials.</p>
+  </div>
+  <div class="d-flex gap-2">
+    {% if not current_user.is_admin %}
+    <button type="button" class="btn btn-primary btn-sm px-3 d-inline-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#dailyReportModal">
+      <i data-lucide="clipboard-list"></i><span>Get Daily Report</span>
+    </button>
+    {% endif %}
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('api_keys.create') }}" class="btn btn-primary btn-sm px-3 d-inline-flex align-items-center gap-2 shadow-sm">
+      <i data-lucide="plus"></i><span>Add API Key</span>
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Compact 7-Day Expiry Alert Banner -->
+{% if expiring_7d %}
+<div class="expiry-banner-compact d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <div class="d-flex align-items-center gap-3">
+    <div class="rounded-circle bg-danger text-white d-flex align-items-center justify-content-center flex-shrink-0" style="width: 34px; height: 34px;">
+      <i data-lucide="alert-triangle"></i>
+    </div>
+    <div>
+      <div class="fw-semibold small">{{ expiring_7d|length }} key(s) expiring within the next 7 days</div>
+      <div class="small opacity-75">
+        {% for ek in expiring_7d %}
+          <strong>{{ ek.name }}</strong> ({{ ek.provider }} &bull; {{ ek.environment }} &bull; {{ ek.days_until_expiry }}d left){% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% if current_user.is_admin %}
+  <a href="{{ url_for('rotation.index') }}" class="btn btn-danger btn-sm px-3 fw-medium">Rotate Now</a>
+  {% else %}
+  <a href="{{ url_for('alerts.index') }}" class="btn btn-outline-danger btn-sm px-3 fw-medium">View Alerts</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- 4 KPI Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card h-100">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <span class="text-muted small fw-semibold">Total API Keys</span>
+        <div class="stat-icon-box" style="background: #EFF6FF; color: #2563EB;">
+          <i data-lucide="key-round"></i>
+        </div>
+      </div>
+      <div class="fs-2 fw-bold text-dark lh-1 mb-1">{{ total_keys }}</div>
+      <div class="small text-muted">Across {{ total_apps }} application(s)</div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card h-100">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <span class="text-muted small fw-semibold">Active Keys</span>
+        <div class="stat-icon-box" style="background: #DCFCE7; color: #16A34A;">
+          <i data-lucide="check-circle-2"></i>
+        </div>
+      </div>
+      <div class="fs-2 fw-bold lh-1 mb-1" style="color: var(--saas-success);">{{ active_keys }}</div>
+      <div class="small text-muted">Healthy &amp; operational</div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card h-100 {% if expiring_7d %}border-danger{% endif %}">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <span class="small fw-semibold {% if expiring_7d %}text-danger{% else %}text-muted{% endif %}">Expiring Soon (&le; 7d)</span>
+        <div class="stat-icon-box" style="background: #FEF3C7; color: #F59E0B;">
+          <i data-lucide="clock"></i>
+        </div>
+      </div>
+      <div class="fs-2 fw-bold lh-1 mb-1" style="color: {% if expiring_7d %}var(--saas-danger){% else %}var(--saas-warning){% endif %};">{{ expiring_7d|length }}</div>
+      <div class="small text-muted">Require attention within 7 days</div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card h-100">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <span class="text-muted small fw-semibold">Expired Keys</span>
+        <div class="stat-icon-box" style="background: #FEE2E2; color: #DC2626;">
+          <i data-lucide="x-octagon"></i>
+        </div>
+      </div>
+      <div class="fs-2 fw-bold lh-1 mb-1" style="color: var(--saas-danger);">{{ expired_keys }}</div>
+      <div class="small text-muted">Needs renewal or removal</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row: Provider Distribution & Key Lifecycle Overview -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card card-custom p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+          <i data-lucide="pie-chart" class="text-primary"></i>
+          <span>API Provider Distribution</span>
+        </h6>
+        <span class="badge badge-soft-slate">Live</span>
+      </div>
+      <div style="position: relative; height: 220px;">
+        <canvas id="providerChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card card-custom p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+          <i data-lucide="bar-chart-3" class="text-primary"></i>
+          <span>Key Lifecycle Overview</span>
+        </h6>
+        <span class="badge badge-soft-slate">Status</span>
+      </div>
+      <div style="position: relative; height: 220px;">
+        <canvas id="lifecycleChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upcoming Expirations & Recent Activities -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card card-custom p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+          <i data-lucide="calendar-clock" class="text-warning"></i>
+          <span>Upcoming Expirations</span>
+        </h6>
+        <a href="{{ url_for('alerts.index') }}" class="btn btn-sm btn-light border">View Alerts</a>
+      </div>
+      {% if expiring_7d %}
+      <div class="list-group list-group-flush">
+        {% for ek in expiring_7d %}
+        <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center border-bottom">
+          <div>
+            <a href="{{ url_for('api_keys.detail', key_id=ek.id) }}" class="fw-semibold text-dark text-decoration-none small">{{ ek.name }}</a>
+            <div class="text-muted" style="font-size: 0.75rem;">
+              {{ ek.provider }} &bull; {{ ek.environment }} &bull; Owner: {{ ek.owner_name }}
+            </div>
+          </div>
+          <span class="badge badge-soft-danger">{{ ek.days_until_expiry }}d left ({{ ek.expires_at.strftime('%Y-%m-%d') }})</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted small">
+        <i data-lucide="shield-check" class="text-success mb-2" style="width: 28px; height: 28px;"></i>
+        <div>No keys expiring in the next 7 days.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card card-custom p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+          <i data-lucide="activity" class="text-primary"></i>
+          <span>Recent Activities</span>
+        </h6>
+        <a href="{{ url_for('audit.index') }}" class="btn btn-sm btn-light border">Audit Logs</a>
+      </div>
+      {% if recent_audits %}
+      <div class="list-group list-group-flush">
+        {% for log in recent_audits[:5] %}
+        <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start border-bottom">
+          <div class="me-2">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge badge-soft-primary" style="font-size: 0.7rem;">{{ log.action }}</span>
+              <span class="small fw-semibold text-dark">{{ log.username }}</span>
+            </div>
+            <div class="text-muted text-truncate" style="font-size: 0.76rem; max-width: 380px;" title="{{ log.details }}">
+              {{ log.details or '-' }}
+            </div>
+          </div>
+          <span class="text-muted text-nowrap" style="font-size: 0.72rem;">{{ log.timestamp.strftime('%m-%d %H:%M') }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted small">No recent activity logged.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Active Key Registry Table -->
+<div class="card card-custom overflow-hidden">
+  <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+    <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+      <i data-lucide="key-round" class="text-primary"></i>
+      <span>Active Key Registry</span>
+    </h6>
+    <a href="{{ url_for('api_keys.index') }}" class="btn btn-sm btn-light border">Manage Inventory</a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-saas mb-0">
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Environment</th>
+          <th>Provider &amp; Identifiers</th>
+          <th>Key Name</th>
+          <th>Owner</th>
+          <th>Allowed Models</th>
+          <th>Created</th>
+          <th>Expiry Date</th>
+          <th>Last Rotated</th>
+          <th>Status</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if all_keys %}
+          {% for key in all_keys %}
+          {% set days_left = key.days_until_expiry %}
+          {% set is_critical_7d = (days_left is not none and days_left >= 0 and days_left <= 7 and key.status != 'Revoked') %}
+          {% set is_expired = (days_left is not none and days_left < 0 and key.status != 'Revoked') %}
+
+          <tr class="{% if is_critical_7d %}row-expiring-7d{% endif %}">
+            <td class="fw-semibold text-dark">{{ key.application.name if key.application else 'Standalone' }}</td>
+            <td>
+              {% if key.environment == 'Production' %}
+                <span class="badge badge-soft-danger">Production</span>
+              {% else %}
+                <span class="badge badge-soft-warning">UAT</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="mb-1">
+                <span class="badge-provider badge-{{ key.provider.lower().replace(' ', '-') }}">{{ key.provider }}</span>
+              </div>
+              {% if key.decrypted_project_name %}
+              <div class="mb-1">
+                <span class="secret-chip">
+                  <span class="text-muted">Proj:</span>
+                  <span id="dash_proj_{{ key.id }}" data-value="{{ key.decrypted_project_name }}" data-masked-value="••••••••" data-masked="true">••••••••</span>
+                  <button type="button" class="btn-reveal-secret" data-target="dash_proj_{{ key.id }}" title="Reveal Project">
+                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i>
+                  </button>
+                </span>
+              </div>
+              {% endif %}
+              {% if key.decrypted_key_id %}
+              <div class="mb-1">
+                <span class="secret-chip">
+                  <span class="text-muted">Key:</span>
+                  <span id="dash_key_{{ key.id }}" data-value="{{ key.decrypted_key_id }}" data-masked-value="••••••••" data-masked="true">••••••••</span>
+                  <button type="button" class="btn-reveal-secret" data-target="dash_key_{{ key.id }}" title="Reveal Key ID">
+                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i>
+                  </button>
+                </span>
+              </div>
+              {% endif %}
+              {% if key.decrypted_workspace_id %}
+              <div>
+                <span class="secret-chip">
+                  <span class="text-muted">WS:</span>
+                  <span id="dash_ws_{{ key.id }}" data-value="{{ key.decrypted_workspace_id }}" data-masked-value="••••••••" data-masked="true">••••••••</span>
+                  <button type="button" class="btn-reveal-secret" data-target="dash_ws_{{ key.id }}" title="Reveal Workspace ID">
+                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i>
+                  </button>
+                </span>
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('api_keys.detail', key_id=key.id) }}" class="fw-semibold text-dark text-decoration-none">{{ key.name }}</a>
+            </td>
+            <td class="fw-medium text-dark">{{ key.owner_name }}</td>
+            <td>
+              {% if key.allowed_models %}
+                {% for model in key.allowed_models.split(',') %}
+                  <span class="badge badge-soft-slate mb-1">{{ model.strip() }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">All</span>
+              {% endif %}
+            </td>
+            <td class="text-muted text-nowrap">{{ key.created_at.strftime('%Y-%m-%d') if key.created_at else '-' }}</td>
+            <td class="text-nowrap">
+              {% if key.expires_at %}
+                <div class="fw-medium">{{ key.expires_at.strftime('%Y-%m-%d') }}</div>
+                {% if is_critical_7d %}
+                  <span class="badge bg-danger mt-1">Expires in {{ days_left }}d</span>
+                {% elif is_expired %}
+                  <span class="badge bg-dark mt-1">Expired</span>
+                {% else %}
+                  <span class="text-muted" style="font-size: 0.74rem;">{{ days_left }}d left</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+            <td class="text-muted text-nowrap">{{ key.last_rotated_at.strftime('%Y-%m-%d') if key.last_rotated_at else '-' }}</td>
+            <td>
+              {% if is_critical_7d %}
+                <span class="badge badge-soft-danger">Expiring Soon</span>
+              {% elif key.status == 'Active' %}
+                <span class="badge badge-soft-success">Active</span>
+              {% elif key.status == 'Expired' %}
+                <span class="badge badge-soft-slate">Expired</span>
+              {% else %}
+                <span class="badge badge-soft-slate">{{ key.status }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              <a href="{{ url_for('api_keys.detail', key_id=key.id) }}" class="btn btn-sm btn-light border py-1 px-2" title="View">
+                <i data-lucide="eye"></i>
+              </a>
+              {% if current_user.is_admin %}
+              <a href="{{ url_for('api_keys.edit', key_id=key.id) }}" class="btn btn-sm btn-light border py-1 px-2" title="Edit">
+                <i data-lucide="pencil"></i>
+              </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="11" class="text-center py-5 text-muted">No API keys registered yet.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const providerCtx = document.getElementById('providerChart');
+  if (providerCtx) {
+    new Chart(providerCtx.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: {{ provider_labels|tojson }},
+        datasets: [{
+          data: {{ provider_data|tojson }},
+          backgroundColor: ['#16A34A', '#2563EB', '#F59E0B', '#7C3AED', '#DB2777'],
+          borderWidth: 2,
+          borderColor: '#FFFFFF'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'Inter', size: 12 } } }
+        },
+        cutout: '68%'
+      }
+    });
+  }
+
+  const lifecycleCtx = document.getElementById('lifecycleChart');
+  if (lifecycleCtx) {
+    new Chart(lifecycleCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: ['Active', 'Expiring (<=7d)', 'Expired', 'Revoked'],
+        datasets: [{
+          label: 'Keys',
+          data: [{{ active_keys }}, {{ expiring_7d|length }}, {{ expired_keys }}, {{ revoked_keys }}],
+          backgroundColor: ['#16A34A', '#F59E0B', '#DC2626', '#64748B'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

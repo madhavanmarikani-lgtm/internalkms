@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Key - {{ key.name }}{% endblock %}
+{% block page_title %}API Key Details{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ url_for('api_keys.index') }}" class="btn btn-sm btn-light border">
+      <i data-lucide="arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-1 text-dark">{{ key.name }}</h4>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge-provider badge-{{ key.provider.lower().replace(' ', '-') }}">{{ key.provider }}</span>
+        {% if key.environment == 'Production' %}
+          <span class="badge badge-soft-danger">Production</span>
+        {% else %}
+          <span class="badge badge-soft-warning">UAT</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('api_keys.edit', key_id=key.id) }}" class="btn btn-light border btn-sm d-inline-flex align-items-center gap-1">
+      <i data-lucide="pencil"></i><span>Edit</span>
+    </a>
+    <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#rotateKeyModal">
+      <i data-lucide="refresh-cw"></i><span>Rotate Key</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Compact 7-Day Expiry Alert -->
+{% set days_left = key.days_until_expiry %}
+{% if days_left is not none and days_left >= 0 and days_left <= 7 and key.status != 'Revoked' %}
+<div class="expiry-banner-compact d-flex align-items-center gap-3 mb-4">
+  <i data-lucide="alert-triangle" class="text-danger flex-shrink-0"></i>
+  <div class="small">
+    <strong>Expiring in {{ days_left }} day(s):</strong> This key expires on <strong>{{ key.expires_at.strftime('%Y-%m-%d') }}</strong>.
+  </div>
+</div>
+{% endif %}
+
+<!-- Core Key Metadata Card -->
+<div class="card card-custom p-4 mb-4">
+  <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 d-flex align-items-center gap-2">
+    <i data-lucide="shield" class="text-primary"></i>
+    <span>Key Specification</span>
+  </h6>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <dl class="row small mb-0">
+        <dt class="col-sm-5 text-muted">Application:</dt>
+        <dd class="col-sm-7 fw-semibold text-dark">{{ key.application.name if key.application else 'Standalone' }}</dd>
+
+        <dt class="col-sm-5 text-muted">Environment:</dt>
+        <dd class="col-sm-7">
+          {% if key.environment == 'Production' %}
+            <span class="badge badge-soft-danger">Production</span>
+          {% else %}
+            <span class="badge badge-soft-warning">UAT</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-5 text-muted">AI Provider:</dt>
+        <dd class="col-sm-7"><span class="badge-provider badge-{{ key.provider.lower().replace(' ', '-') }}">{{ key.provider }}</span></dd>
+
+        {% if key.decrypted_project_name %}
+        <dt class="col-sm-5 text-muted">Project Name:</dt>
+        <dd class="col-sm-7">
+          <span class="secret-chip">
+            <span id="det_proj" data-value="{{ key.decrypted_project_name }}" data-masked-value="••••••••••••" data-masked="true">••••••••••••</span>
+            <button type="button" class="btn-reveal-secret" data-target="det_proj" title="Reveal"><i data-lucide="eye" style="width: 13px; height: 13px;"></i></button>
+          </span>
+        </dd>
+        {% endif %}
+
+        {% if key.decrypted_key_id %}
+        <dt class="col-sm-5 text-muted">Key ID:</dt>
+        <dd class="col-sm-7">
+          <span class="secret-chip">
+            <span id="det_key" data-value="{{ key.decrypted_key_id }}" data-masked-value="••••••••••••" data-masked="true">••••••••••••</span>
+            <button type="button" class="btn-reveal-secret" data-target="det_key" title="Reveal"><i data-lucide="eye" style="width: 13px; height: 13px;"></i></button>
+          </span>
+        </dd>
+        {% endif %}
+
+        {% if key.decrypted_workspace_id %}
+        <dt class="col-sm-5 text-muted">Workspace ID:</dt>
+        <dd class="col-sm-7">
+          <span class="secret-chip">
+            <span id="det_ws" data-value="{{ key.decrypted_workspace_id }}" data-masked-value="••••••••••••" data-masked="true">••••••••••••</span>
+            <button type="button" class="btn-reveal-secret" data-target="det_ws" title="Reveal"><i data-lucide="eye" style="width: 13px; height: 13px;"></i></button>
+          </span>
+        </dd>
+        {% endif %}
+
+        <dt class="col-sm-5 text-muted">Key Name:</dt>
+        <dd class="col-sm-7 fw-semibold">{{ key.name }}</dd>
+
+        <dt class="col-sm-5 text-muted">Owner:</dt>
+        <dd class="col-sm-7 fw-semibold text-primary">{{ key.owner_name }}</dd>
+      </dl>
+    </div>
+
+    <div class="col-md-6">
+      <dl class="row small mb-0">
+        <dt class="col-sm-5 text-muted">Allowed Models:</dt>
+        <dd class="col-sm-7">
+          {% if key.allowed_models %}
+            {% for m in key.allowed_models.split(',') %}
+              <span class="badge badge-soft-slate me-1 mb-1">{{ m.strip() }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="text-muted">All</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-5 text-muted">Reason:</dt>
+        <dd class="col-sm-7">{{ key.reason or 'N/A' }}</dd>
+
+        <dt class="col-sm-5 text-muted">Created Date:</dt>
+        <dd class="col-sm-7">{{ key.created_at.strftime('%Y-%m-%d') if key.created_at else '-' }}</dd>
+
+        <dt class="col-sm-5 text-muted">Last Rotated:</dt>
+        <dd class="col-sm-7">{{ key.last_rotated_at.strftime('%Y-%m-%d') if key.last_rotated_at else 'Initial' }}</dd>
+
+        <dt class="col-sm-5 text-muted">Expiry Date (30d):</dt>
+        <dd class="col-sm-7">
+          {% if key.expires_at %}
+            <span class="fw-semibold">{{ key.expires_at.strftime('%Y-%m-%d') }}</span>
+            {% if days_left is not none and days_left >= 0 and days_left <= 7 %}
+              <span class="badge bg-danger ms-1">{{ days_left }}d left</span>
+            {% elif days_left is not none and days_left < 0 %}
+              <span class="badge bg-dark ms-1">Expired</span>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-5 text-muted">Status:</dt>
+        <dd class="col-sm-7">
+          {% if days_left is not none and days_left >= 0 and days_left <= 7 and key.status != 'Revoked' %}
+            <span class="badge badge-soft-danger">Expiring Soon</span>
+          {% elif key.status == 'Active' %}
+            <span class="badge badge-soft-success">Active</span>
+          {% elif key.status == 'Expired' %}
+            <span class="badge badge-soft-slate">Expired</span>
+          {% else %}
+            <span class="badge badge-soft-slate">{{ key.status }}</span>
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+  </div>
+</div>
+
+{% if current_user.is_admin %}
+<!-- Rotation History Table (Admin Only) -->
+<div class="card card-custom overflow-hidden mb-4">
+  <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+    <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+      <i data-lucide="history" class="text-primary"></i>
+      <span>Rotation History</span>
+    </h6>
+    <button class="btn btn-sm btn-light border" data-bs-toggle="modal" data-bs-target="#rotateKeyModal">
+      New Rotation
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-saas mb-0">
+      <thead>
+        <tr>
+          <th>Rotation Date</th>
+          <th>Rotated By</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rotations %}
+          {% for rot in rotations %}
+          <tr>
+            <td>{{ rot.rotation_date.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td><span class="badge badge-soft-slate">{{ rot.rotated_by.username if rot.rotated_by else 'System' }}</span></td>
+            <td>{{ rot.reason }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="3" class="text-center py-4 text-muted">No rotation events recorded.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Rotation Modal -->
+<div class="modal fade" id="rotateKeyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('rotation.rotate_key', key_id=key.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+        <div class="modal-header bg-light border-bottom">
+          <h6 class="modal-title fw-bold">Rotate Key: {{ key.name }}</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">New Key ID *</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="new_key_identifier" required placeholder="e.g. key_01xyz">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Reason for Rotation *</label>
+            <input type="text" class="form-control form-control-sm" name="reason" value="Instant Key Rotation" required>
+          </div>
+        </div>
+        <div class="modal-footer border-top">
+          <button type="button" class="btn btn-sm btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Rotate Immediately</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
