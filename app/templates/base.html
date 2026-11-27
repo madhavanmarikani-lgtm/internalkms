@@ -235,7 +235,7 @@
   <!-- Daily Report Modal (Viewer Side) -->
   {% if current_user.is_authenticated and not current_user.is_admin %}
   <div class="modal fade" id="dailyReportModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
         <div class="modal-header bg-light border-bottom">
           <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
@@ -244,33 +244,149 @@
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <p class="small text-muted mb-2">Format: <code>PROJECT NAME --&gt; LAST CHANGED --&gt; STATUS</code></p>
-          <textarea id="dailyReportText" class="form-control font-monospace small bg-light" rows="11" readonly>{% for k in global_daily_report_keys %}{{ k.decrypted_project_name or k.decrypted_workspace_id or k.name }} --> {{ (k.updated_at or k.created_at).strftime('%Y-%m-%d %H:%M') if (k.updated_at or k.created_at) else 'N/A' }} --> {{ k.status }}
+        <div class="modal-body p-3 p-sm-4">
+          <div id="dailyReportCapture" class="bg-white border rounded-3 p-3 p-sm-4" style="color: #1E293B;">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-3 border-bottom">
+              <div>
+                <div class="fw-bold" style="font-size: 1rem; color: #14213D;">{{ global_app_title or 'AI Key Manager' }} &mdash; Daily Key Status</div>
+                <div class="text-muted" style="font-size: 0.78rem;" id="dailyReportDateLabel">Key Name &bull; Expiry Countdown &bull; Status</div>
+              </div>
+              <span class="badge rounded-pill" style="background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-size: 0.75rem; padding: 0.35rem 0.7rem;">
+                {{ global_daily_report_keys|length }} Key(s)
+              </span>
+            </div>
+
+            {% if global_daily_report_keys %}
+            <div class="table-responsive">
+              <table class="table align-middle mb-0" style="font-size: 0.85rem;">
+                <thead>
+                  <tr style="background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0;">
+                    <th class="py-2 px-3 text-uppercase fw-semibold" style="font-size: 0.72rem; color: #475569; letter-spacing: 0.04em;">Key Name</th>
+                    <th class="py-2 px-3 text-uppercase fw-semibold" style="font-size: 0.72rem; color: #475569; letter-spacing: 0.04em;">Expires In</th>
+                    <th class="py-2 px-3 text-uppercase fw-semibold" style="font-size: 0.72rem; color: #475569; letter-spacing: 0.04em;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for k in global_daily_report_keys %}
+                  {% set d = k.days_until_expiry %}
+                  <tr style="border-bottom: 1px solid #F1F5F9;">
+                    <td class="py-2 px-3 fw-semibold" style="color: #0F172A;">{{ k.name }}</td>
+                    <td class="py-2 px-3">
+                      {% if d is none %}
+                        <span class="badge rounded-pill" style="background-color: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; font-weight: 600;">No Expiry</span>
+                      {% elif d <= 0 %}
+                        <span class="badge rounded-pill" style="background-color: #FEE2E2; color: #B91C1C; border: 1px solid #FCA5A5; font-weight: 600;">
+                          {% if d == 0 %}Expires today{% else %}Expired {{ -d }} day(s) ago{% endif %}
+                        </span>
+                      {% elif d <= 7 %}
+                        <span class="badge rounded-pill" style="background-color: #FEE2E2; color: #B91C1C; border: 1px solid #FCA5A5; font-weight: 600;">
+                          Expires in {{ d }} day(s)
+                        </span>
+                      {% elif d <= 15 %}
+                        <span class="badge rounded-pill" style="background-color: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; font-weight: 600;">
+                          Expires in {{ d }} day(s)
+                        </span>
+                      {% else %}
+                        <span class="badge rounded-pill" style="background-color: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; font-weight: 600;">
+                          Expires in {{ d }} day(s)
+                        </span>
+                      {% endif %}
+                    </td>
+                    <td class="py-2 px-3">
+                      {% if k.status == 'Active' %}
+                        <span class="badge rounded-pill" style="background-color: #DCFCE7; color: #15803D; font-weight: 600;">Active</span>
+                      {% elif k.status == 'Expiring Soon' %}
+                        <span class="badge rounded-pill" style="background-color: #FEF3C7; color: #B45309; font-weight: 600;">Expiring Soon</span>
+                      {% elif k.status == 'Expired' %}
+                        <span class="badge rounded-pill" style="background-color: #FEE2E2; color: #B91C1C; font-weight: 600;">Expired</span>
+                      {% else %}
+                        <span class="badge rounded-pill" style="background-color: #F1F5F9; color: #475569; font-weight: 600;">{{ k.status }}</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted small">
+              No API keys registered yet.
+            </div>
+            {% endif %}
+          </div>
+
+          <textarea id="dailyReportText" class="d-none" readonly>{% for k in global_daily_report_keys %}{% set d = k.days_until_expiry %}{{ k.name }} --> {% if d is none %}No Expiry{% elif d == 0 %}Expires today{% elif d < 0 %}Expired {{ -d }} day(s) ago{% else %}Expires in {{ d }} day(s){% endif %} --> {{ k.status }}
 {% endfor %}</textarea>
         </div>
-        <div class="modal-footer border-top">
+        <div class="modal-footer border-top d-flex flex-wrap justify-content-between gap-2">
           <button type="button" class="btn btn-sm btn-light border" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" id="copyDailyReportBtn" onclick="copyDailyReport()">
-            <i data-lucide="copy"></i><span>Copy Report</span>
-          </button>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-light border d-inline-flex align-items-center gap-1" id="copyDailyReportBtn" onclick="copyDailyReport()">
+              <i data-lucide="copy"></i><span>Copy Text</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" id="exportDailyReportImgBtn" onclick="exportDailyReportImage()" {% if not global_daily_report_keys %}disabled{% endif %}>
+              <i data-lucide="image-down"></i><span>Export as Image</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
+    (function () {
+      const lbl = document.getElementById('dailyReportDateLabel');
+      if (lbl) {
+        const now = new Date();
+        lbl.textContent = 'Generated on ' + now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+    })();
+
     function copyDailyReport() {
       const el = document.getElementById('dailyReportText');
-      el.select();
+      if (!el) return;
       navigator.clipboard.writeText(el.value).then(() => {
         const btn = document.getElementById('copyDailyReportBtn');
-        btn.innerHTML = '<span>Copied!</span>';
+        btn.innerHTML = '<span class="text-success fw-semibold">Copied!</span>';
+        setTimeout(() => {
+          btn.innerHTML = '<i data-lucide="copy"></i><span>Copy Text</span>';
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }, 2000);
+      });
+    }
+
+    function exportDailyReportImage() {
+      const target = document.getElementById('dailyReportCapture');
+      const btn = document.getElementById('exportDailyReportImgBtn');
+      if (!target || typeof html2canvas === 'undefined') return;
+
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span>Exporting...</span>';
+
+      html2canvas(target, {
+        scale: 2,
+        backgroundColor: '#FFFFFF',
+        useCORS: true
+      }).then((canvas) => {
+        const link = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.download = `daily-key-status-${dateStr}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+
+        btn.innerHTML = '<span>Downloaded!</span>';
         btn.classList.replace('btn-primary', 'btn-success');
         setTimeout(() => {
-          btn.innerHTML = '<i data-lucide="copy"></i><span>Copy Report</span>';
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
           btn.classList.replace('btn-success', 'btn-primary');
           if (typeof lucide !== 'undefined') lucide.createIcons();
         }, 2000);
+      }).catch(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
       });
     }
   </script>
