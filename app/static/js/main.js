@@ -9,19 +9,52 @@ document.addEventListener('DOMContentLoaded', () => {
   // 2. Mobile Sidebar Toggle
   const sidebar = document.getElementById('appSidebar');
   const toggleBtn = document.getElementById('sidebarToggle');
+  const closeBtn = document.getElementById('sidebarClose');
   const overlay = document.getElementById('sidebarOverlay');
+
+  function openSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.add('show');
+    if (overlay) overlay.classList.remove('d-none');
+    document.body.classList.add('sidebar-open');
+  }
+
+  function closeSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.remove('show');
+    if (overlay) overlay.classList.add('d-none');
+    document.body.classList.remove('sidebar-open');
+  }
 
   if (toggleBtn && sidebar) {
     toggleBtn.addEventListener('click', () => {
-      sidebar.classList.toggle('show');
-      if (overlay) overlay.classList.toggle('d-none');
+      if (sidebar.classList.contains('show')) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
     });
   }
 
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeSidebar);
+  }
+
   if (overlay) {
-    overlay.addEventListener('click', () => {
-      if (sidebar) sidebar.classList.remove('show');
-      overlay.classList.add('d-none');
+    overlay.addEventListener('click', closeSidebar);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar && sidebar.classList.contains('show')) {
+      closeSidebar();
+    }
+  });
+
+  if (sidebar) {
+    sidebar.querySelectorAll('.nav-item-link').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth < 992) closeSidebar();
+      });
     });
   }
 
